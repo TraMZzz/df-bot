@@ -1,39 +1,82 @@
+import re
 import json
 import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 import logging
 import os
 
+# Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL')
+# Get environment variables
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!")
+async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        text = update.message.text
+        if text == "/hello":
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text="Hello! How can I help you?"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text="I don't understand."
+            )
+    except Exception as exc:
+        logger.error(f"Error in hello_command: {exc}")
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        text = update.message.text
+        if re.search(r"(?i).*hello.*", text):
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text="Hello there! Glad you messaged."
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text="I don't understand."
+            )
+
+    except Exception as exc:
+        logger.error(f"Error in hello_message: {exc}")
+
 
 def lambda_handler(event, context):
-    logger.info("event: {}".format(json.dumps(event)))
-    asyncio.get_event_loop().run_until_complete(main(event, context))
+    try:
+        application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+        logger.info(f"event: {json.dumps(event)}")
+        asyncio.get_event_loop().run_until_complete(main(event, application))
+    except Exception as e:
+        logger.error(f"Error in lambda_handler: {e}")
 
-async def main(event, context):
-    start_handler = CommandHandler('start', start)
-    application.add_handler(start_handler)
-    
-    echo_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), echo)
-    application.add_handler(echo_handler)
-    
-    for record in event['Records']:
-        await application.initialize()
-        await application.process_update(
-            Update.de_json(json.loads(record["body"]), application.bot)
+
+async def main(event, application):
+    try:
+        all_commands_handler = MessageHandler(filters.COMMAND, handle_command)
+        application.add_handler(all_commands_handler)
+
+        all_messages_handler = MessageHandler(
+            filters.TEXT & (~filters.COMMAND), handle_message
         )
-    
-   
+        application.add_handler(all_messages_handler)
+
+        for record in event["Records"]:
+            body = record["body"]
+            if not body:
+                logger.warning("Empty body")
+                continue
+            await application.initialize()
+            await application.process_update(
+                Update.de_json(json.loads(body), application.bot)
+            )
+    except Exception as e:
+        logger.error(f"Error in main function: {e}")

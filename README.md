@@ -19,7 +19,11 @@ grab stack output to get api endpoint
 ```
 curl  -i -k -XPOST https://fc9c1488.execute-api.us-east-1.localhost.localstack.cloud/ -d '{"update_id":813352806,"message":{"message_id":186,"from":{"id":879487978,"is_bot":false,"first_name":"Test","last_name":"Test","language_code":"uk"},"chat":{"id":879487978,"first_name":"Test","last_name":"Test","type":"private"},"date":1708367401,"text":"hello"}}' -H 'Content-Type: application/json'
 ```
+### Unit tests
 
+```
+python -m unittest discover tests
+```
 
 ### Tasks for test
 
